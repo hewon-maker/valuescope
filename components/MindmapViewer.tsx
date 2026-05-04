@@ -44,7 +44,7 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
     const saved = typeof window !== "undefined" ? localStorage.getItem("vs-panel-width") : null;
     if (saved) {
       const n = Number(saved);
-      if (!isNaN(n)) setPanelWidth(Math.max(320, Math.min(900, n)));
+      if (!isNaN(n)) setPanelWidth(Math.max(320, Math.min(1500, n)));
     }
   }, []);
   useEffect(() => {
@@ -269,8 +269,8 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
         )}
       </aside>
 
-      {/* 캔버스 */}
-      <div className="flex-1 relative bg-ink-950">
+      {/* 캔버스 — min-w-0 필수 (없으면 패널이 자라지 못함) */}
+      <div className="flex-1 min-w-0 relative bg-ink-950">
         <div ref={ref} className="cy-container" />
       </div>
 
@@ -283,15 +283,13 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
             role="separator"
             aria-orientation="vertical"
             title="드래그하여 패널 너비 조절 · 더블클릭으로 기본값(480px) 리셋"
-            className={`group relative w-1 shrink-0 cursor-ew-resize transition-colors z-20 ${dragging ? "bg-blue-400" : "bg-ink-700 hover:bg-blue-500"}`}
+            className={`group relative w-3 shrink-0 cursor-ew-resize transition-colors z-20 flex items-center justify-center ${dragging ? "bg-blue-500" : "bg-ink-700 hover:bg-blue-600"}`}
           >
-            {/* 넓은 hit area (양쪽으로 8px씩 더) */}
-            <div className="absolute -left-2 -right-2 top-0 bottom-0" />
             {/* 그립 점 3개 */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-1 pointer-events-none">
-              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-500 group-hover:bg-white"}`} />
-              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-500 group-hover:bg-white"}`} />
-              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-500 group-hover:bg-white"}`} />
+            <div className="flex flex-col gap-1 pointer-events-none">
+              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-400 group-hover:bg-white"}`} />
+              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-400 group-hover:bg-white"}`} />
+              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-400 group-hover:bg-white"}`} />
             </div>
             {/* 드래그 중 현재 폭 표시 */}
             {dragging && (
@@ -301,6 +299,29 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
             )}
           </div>
           <aside style={{ width: panelWidth }} className="shrink-0 bg-ink-900 overflow-y-auto">
+            {/* 폭 프리셋 */}
+            <div className="sticky top-0 z-10 flex gap-1 px-3 py-2 bg-ink-900/95 backdrop-blur border-b border-ink-700 text-[10px]">
+              <span className="text-gray-500 mr-1 self-center">폭</span>
+              {[
+                { label: "좁게", w: 360 },
+                { label: "기본", w: 480 },
+                { label: "넓게", w: 720 },
+                { label: "최대", w: 1200 },
+              ].map((p) => (
+                <button
+                  key={p.w}
+                  onClick={() => setPanelWidth(p.w)}
+                  className={`px-2 py-0.5 rounded font-semibold transition-colors ${
+                    panelWidth === p.w
+                      ? "bg-blue-600 text-white"
+                      : "bg-ink-800 text-gray-400 hover:bg-ink-700 hover:text-gray-200"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <span className="ml-auto text-gray-500 self-center tabular-nums">{panelWidth}px</span>
+            </div>
             <DetailPanel selected={selected} onClose={() => setSelected(null)} />
           </aside>
         </>
