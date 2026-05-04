@@ -20,9 +20,6 @@ const EDGE_COLOR: Record<string, string> = {
   tension: "#f59e0b",
   structure: "#374151",
 };
-const EDGE_LABEL: Record<string, string> = {
-  aligned_strong: "강한 정합", aligned: "정합", weak: "약한 신호", gap: "갭", tension: "내적 긴장",
-};
 
 export default function MindmapViewer({ data }: { data: MindmapData }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -33,9 +30,13 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
     new Set((data.metadata.categories ?? []).map((c) => c.id))
   );
   const [activeSources, setActiveSources] = useState<Set<string>>(new Set(["Q1", "Q2", "Q3", "Q4"]));
-  const [activeEdges, setActiveEdges] = useState<Set<string>>(
+  const [activeEdges] = useState<Set<string>>(
     new Set(["aligned_strong", "aligned", "weak", "gap", "tension"])
   );
+  // 정합 상태 필터: 정합/갭/구성원단독 각각 표시 토글
+  const [showAligned, setShowAligned] = useState(true);
+  const [showGap, setShowGap] = useState(true);
+  const [showSurveyOnly, setShowSurveyOnly] = useState(true);
   const [panelWidth, setPanelWidth] = useState<number>(480);
   const [dragging, setDragging] = useState(false);
 
@@ -109,6 +110,12 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
           },
         },
         { selector: 'node[type="root"]', style: { "font-size": 16, "font-weight": 800, "border-width": 3 } },
+        // 정합 (인터뷰 + 서베이 둘 다) → 녹색 두꺼운 테두리
+        { selector: 'node[?is_aligned]', style: { "border-color": "#10b981", "border-width": 4, "border-opacity": 0.95 } },
+        // 갭 (인터뷰 단독, 서베이에 반향 없음) → 빨강 점선
+        { selector: 'node[?has_gap]', style: { "border-color": "#ef4444", "border-width": 2.5, "border-style": "dashed", "border-opacity": 0.85 } },
+        // 구성원 단독 신호 → 흰 얇은 dotted (선택적 표시)
+        { selector: 'node[?survey_only]', style: { "border-color": "rgba(255,255,255,0.35)", "border-width": 1.5, "border-style": "dotted" } },
         {
           selector: 'node[type="category"]',
           style: {
@@ -183,9 +190,19 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
     cy.nodes().forEach((n) => {
       const d: any = n.data();
       let show = true;
-      if (d.type === "central_value" && d.parent) show = activeCats.has(d.parent);
-      else if (d.type === "category") show = activeCats.has(d.id);
-      else if (d.source && d.source.startsWith("Q")) show = activeSources.has(d.source);
+      if (d.type === "central_value") {
+        if (d.parent) show = activeCats.has(d.parent);
+        if (show) {
+          if (d.is_aligned) show = showAligned;
+          else if (d.has_gap) show = showGap;
+        }
+      } else if (d.type === "category") {
+        show = activeCats.has(d.id);
+      } else if (d.survey_only) {
+        const q = d.source ?? d.sources?.[0];
+        show = showSurveyOnly && (q ? activeSources.has(q) : true);
+        if (show && d.parent) show = activeCats.has(d.parent);
+      }
       n.toggleClass("hidden", !show);
     });
     cy.edges().forEach((e) => {
@@ -199,7 +216,7 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
       }
       e.toggleClass("hidden", !show);
     });
-  }, [activeCats, activeSources, activeEdges]);
+  }, [activeCats, activeSources, activeEdges, showAligned, showGap, showSurveyOnly]);
 
   const switchLayout = (l: "radial" | "cose") => {
     setLayout(l);
@@ -243,17 +260,13 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
             onClick={() => toggle(activeSources, q.id, setActiveSources)}>{q.label}</FilterRow>
         ))}
 
-        <SectionTitle className="mt-3">관계 타입</SectionTitle>
-        {[
-          { id: "aligned_strong", label: "강한 정합", color: "#10b981", line: "solid" },
-          { id: "aligned", label: "정합", color: "#3b82f6", line: "solid" },
-          { id: "weak", label: "약한 신호", color: "#6b7280", line: "dashed" },
-          { id: "gap", label: "갭", color: "#ef4444", line: "dashed" },
-          { id: "tension", label: "내적 긴장", color: "#f59e0b", line: "dashed" },
-        ].map((e) => (
-          <FilterRow key={e.id} active={activeEdges.has(e.id)} line={{ color: e.color, dashed: e.line === "dashed" }}
-            onClick={() => toggle(activeEdges, e.id, setActiveEdges)}>{e.label}</FilterRow>
-        ))}
+        <SectionTitle className="mt-3">정합 상태</SectionTitle>
+        <FilterRow active={showAligned} swatch="#10b981"
+          onClick={() => setShowAligned((v) => !v)}>✅ 정합 (둘 다 있음)</FilterRow>
+        <FilterRow active={showGap} swatch="#ef4444"
+          onClick={() => setShowGap((v) => !v)}>⚠️ 갭 (경영진만)</FilterRow>
+        <FilterRow active={showSurveyOnly} swatch="rgba(255,255,255,0.5)"
+          onClick={() => setShowSurveyOnly((v) => !v)}>👥 구성원 단독 신호</FilterRow>
 
         {coh && (
           <div className="mt-4 bg-gradient-to-br from-ink-800 to-ink-900 border border-ink-600 rounded-lg p-3">
@@ -382,92 +395,151 @@ function Stat({ n, children }: { n: number; children: React.ReactNode }) {
 
 function DetailPanel({ selected, onClose }: { selected: any; onClose: () => void }) {
   const d = selected.data;
-  const edges = selected.edges?.filter((e: any) => e.data.type !== "structure") ?? [];
+  const hasInterview = !!(d.speakers && d.speakers.length) || !!(d.quotes && d.quotes.length);
+  const surveyMatches: any[] = d.survey_matches ?? [];
+  const hasSurvey = surveyMatches.length > 0;
+
+  // 정합 상태 결정
+  let badge: { label: string; color: string; bg: string; desc: string } | null = null;
+  if (hasInterview && hasSurvey) {
+    const top = surveyMatches.reduce((a, b) => (b.match_weight > a.match_weight ? b : a));
+    if (top.match_weight >= 0.85) badge = { label: "✅ 강한 정합", color: "#10b981", bg: "bg-emerald-950/50 border-emerald-700", desc: "경영진의 가치가 구성원 응답에 강하게 반향됨" };
+    else if (top.match_weight >= 0.6) badge = { label: "🤝 정합", color: "#3b82f6", bg: "bg-blue-950/50 border-blue-700", desc: "경영진과 구성원의 인식이 같은 방향" };
+    else badge = { label: "🌫️ 약한 신호", color: "#6b7280", bg: "bg-gray-800/50 border-gray-600", desc: "관련은 있으나 강도가 약함" };
+  } else if (hasInterview && !hasSurvey) {
+    badge = { label: "⚠️ 잠재 갭", color: "#ef4444", bg: "bg-red-950/40 border-red-700", desc: "경영진은 강조하지만 구성원 응답에선 매칭 없음 — 메시지 전달·체감이 약할 수 있음" };
+  } else if (!hasInterview && hasSurvey) {
+    badge = { label: "👥 구성원 단독", color: "#a78bfa", bg: "bg-violet-950/40 border-violet-700", desc: "구성원이 자발적으로 제기했으나 경영진 인터뷰엔 없는 신호" };
+  }
+
   return (
     <div className="p-5">
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <div className="text-lg font-bold text-white leading-tight">{(d.label || "").replace(/\n/g, " ")}</div>
-          <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-ink-700 text-gray-300">
-            {TYPE_LABEL[d.type] || d.type}
-          </span>
+      {/* 헤더 */}
+      <div className="flex justify-between items-start mb-3">
+        <div className="min-w-0">
+          <div className="text-lg font-bold text-white leading-tight break-keep">{(d.label || "").replace(/\n/g, " ")}</div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-ink-700 text-gray-300">
+              {TYPE_LABEL[d.type] || d.type}
+            </span>
+            {hasInterview && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-500/20 text-orange-300 border border-orange-700/40">
+                📋 경영진
+              </span>
+            )}
+            {hasSurvey && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-700/40">
+                📊 구성원 ({Array.from(new Set(surveyMatches.map((m: any) => m.q))).join("·")})
+              </span>
+            )}
+          </div>
         </div>
-        <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none ml-2">✕</button>
+        <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none ml-2 shrink-0">✕</button>
       </div>
 
-      {d.subthemes && d.subthemes.length > 0 && (
-        <Section title="서브테마">
-          {d.subthemes.map((t: string) => (
-            <span key={t} className="inline-block px-2 py-0.5 rounded-full bg-ink-800 text-blue-300 text-[11px] mr-1.5 mb-1.5">{t}</span>
-          ))}
-        </Section>
+      {/* 정합/갭 배지 */}
+      {badge && (
+        <div className={`border ${badge.bg} rounded-lg px-3 py-2 mb-4`}>
+          <div className="font-bold text-[13px]" style={{ color: badge.color }}>{badge.label}</div>
+          <div className="text-[12px] text-gray-300 mt-0.5 leading-relaxed">{badge.desc}</div>
+        </div>
       )}
 
-      {d.speakers && d.speakers.length > 0 && (
-        <Section title="발화자">
-          {d.speakers.map((s: string) => (
-            <span key={s} className="inline-block px-2 py-0.5 rounded-full bg-ink-800 text-blue-300 text-[11px] mr-1.5 mb-1.5">{s}</span>
-          ))}
-        </Section>
-      )}
-
-      {(d.frequency != null) && (
-        <Section title="빈도">
-          <div className="bg-ink-800 rounded-md px-3 py-2">
-            <div className="text-[10px] text-gray-500">{d.source} 순위 {d.rank}위</div>
-            <div className="flex items-baseline gap-2">
-              <div className="text-2xl font-bold text-white">{d.frequency}</div>
-              <div className="text-xs text-gray-400">{d.ratio ? (d.ratio * 100).toFixed(0) + "%" : ""}</div>
-            </div>
-          </div>
-        </Section>
-      )}
-
-      {d.summary && <Section title="해석"><div className="text-[13.5px] text-gray-200 leading-relaxed bg-ink-800 rounded-md px-4 py-3">{d.summary}</div></Section>}
-      {d.sample_quote && <Section title="대표 응답"><Quote>{d.sample_quote}</Quote></Section>}
-      {d.by_dept && <Section title="부서 분포"><div className="text-[13.5px] text-gray-200 bg-ink-800 rounded-md px-4 py-3">{d.by_dept}</div></Section>}
-
-      {d.quotes && d.quotes.length > 0 && (
-        <Section title="대표 인용구">
-          {d.quotes.map((q: string, i: number) => <Quote key={i}>{q}</Quote>)}
-        </Section>
-      )}
-
-      {edges.length > 0 && (
-        <Section title={`연결 관계 (${edges.length})`}>
-          {edges.map((e: any, i: number) => {
-            const t = e.data.type;
-            const cls = {
-              aligned_strong: "border-l-emerald-500",
-              aligned: "border-l-blue-500",
-              weak: "border-l-gray-500",
-              gap: "border-l-red-500",
-              tension: "border-l-amber-500",
-            }[t as string] ?? "border-l-blue-500";
-            return (
-              <div key={i} className={`bg-ink-800 border-l-2 ${cls} px-3 py-2 mb-1.5 rounded-r text-xs text-gray-300`}>
-                <strong className="text-white">{e.otherLabel?.replace(/\n/g, " ")}</strong>
-                <div className="text-[11px] text-gray-400 mt-1">
-                  <b>{e.data.label || EDGE_LABEL[t] || t}</b>{e.data.weight ? ` (강도 ${(e.data.weight * 100).toFixed(0)}%)` : ""}
-                </div>
-                {e.data.explanation && <div className="text-[11px] text-gray-500 mt-1 italic leading-snug">{e.data.explanation}</div>}
+      {/* 좌우 비교 — 경영진 / 구성원 */}
+      <div className="space-y-4">
+        {/* 📋 경영진 관점 */}
+        {hasInterview && (
+          <PerspectiveBlock
+            tone="exec"
+            title="경영진 관점"
+            subtitle={d.speakers ? `${d.speakers.length}명 인용` : undefined}
+          >
+            {d.importance != null && (
+              <div className="text-[12px] text-gray-400 mb-2">중요도 <b className="text-orange-300">{(d.importance * 100).toFixed(0)}%</b>{d.emotion ? ` · 감정: ${d.emotion}` : ""}</div>
+            )}
+            {d.speakers && d.speakers.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {d.speakers.map((s: string) => (
+                  <span key={s} className="px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-200 text-[11px]">{s}</span>
+                ))}
               </div>
-            );
-          })}
-        </Section>
-      )}
+            )}
+            {d.subthemes && d.subthemes.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {d.subthemes.map((t: string) => (
+                  <span key={t} className="px-2 py-0.5 rounded-full bg-ink-800 text-orange-200 text-[11px]">#{t}</span>
+                ))}
+              </div>
+            )}
+            {d.quotes && d.quotes.length > 0 && (
+              <div className="mt-2">
+                {d.quotes.slice(0, 4).map((q: string, i: number) => (
+                  <Quote key={i} accent="exec">{q}</Quote>
+                ))}
+              </div>
+            )}
+          </PerspectiveBlock>
+        )}
+
+        {/* 📊 구성원 관점 */}
+        {hasSurvey && (
+          <PerspectiveBlock
+            tone="staff"
+            title="구성원 관점"
+            subtitle={`${surveyMatches.length}개 매칭`}
+          >
+            {surveyMatches.map((m: any, i: number) => (
+              <div key={i} className="bg-ink-800 rounded-md px-3 py-2.5 mb-2 last:mb-0 border-l-2 border-violet-500">
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-violet-300">{m.q}</span>
+                  <span className="text-[11px] text-gray-500">{m.q_label}</span>
+                  <span className="text-[11px] text-gray-500 ml-auto">{m.rank}위</span>
+                </div>
+                <div className="text-[14px] font-semibold text-white mb-1.5 break-keep">{m.keyword}</div>
+                <div className="flex items-baseline gap-2 mb-1.5">
+                  <span className="text-xl font-bold text-violet-300 tabular-nums">{m.frequency}</span>
+                  <span className="text-[11px] text-gray-400">명 ({m.ratio ? (m.ratio * 100).toFixed(0) + "%" : "—"})</span>
+                </div>
+                {m.by_dept && <div className="text-[11.5px] text-gray-400 mb-1.5"><b className="text-gray-300">부서:</b> {m.by_dept}</div>}
+                {m.sample_quote && <Quote accent="staff">{m.sample_quote}</Quote>}
+              </div>
+            ))}
+          </PerspectiveBlock>
+        )}
+
+        {/* 갭일 때 안내 */}
+        {hasInterview && !hasSurvey && (
+          <div className="bg-red-950/30 border border-red-800/50 rounded-lg px-4 py-3 text-[13px] text-red-200 leading-relaxed">
+            구성원 응답(서베이 Q1~Q4) 어디에서도 매칭되는 키워드가 없습니다. 경영진이 강조하는 가치가 현장에 충분히 전달되지 않았거나, 구성원이 다른 언어로 표현하고 있을 가능성.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function PerspectiveBlock({ tone, title, subtitle, children }: {
+  tone: "exec" | "staff";
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  const isExec = tone === "exec";
+  const accent = isExec ? "text-orange-300" : "text-violet-300";
+  const icon = isExec ? "📋" : "📊";
   return (
-    <div className="mb-4">
-      <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-2">{title}</h4>
+    <div className={`border-l-4 ${isExec ? "border-orange-500" : "border-violet-500"} pl-3`}>
+      <div className="flex items-baseline gap-2 mb-2">
+        <span className="text-base">{icon}</span>
+        <h4 className={`text-[13px] font-bold ${accent} uppercase tracking-wide`}>{title}</h4>
+        {subtitle && <span className="text-[11px] text-gray-500">· {subtitle}</span>}
+      </div>
       <div>{children}</div>
     </div>
   );
 }
-function Quote({ children }: { children: React.ReactNode }) {
-  return <div className="bg-ink-800 border-l-2 border-blue-400 px-4 py-3 mb-2 rounded-r text-[13.5px] text-gray-200 leading-relaxed whitespace-pre-wrap break-words">{children}</div>;
+
+function Quote({ children, accent }: { children: React.ReactNode; accent?: "exec" | "staff" }) {
+  const border = accent === "exec" ? "border-orange-400" : accent === "staff" ? "border-violet-400" : "border-blue-400";
+  return <div className={`bg-ink-800 border-l-2 ${border} px-4 py-3 mb-2 rounded-r text-[13.5px] text-gray-200 leading-relaxed whitespace-pre-wrap break-words`}>{children}</div>;
 }
