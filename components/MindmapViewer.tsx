@@ -37,6 +37,7 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
     new Set(["aligned_strong", "aligned", "weak", "gap", "tension"])
   );
   const [panelWidth, setPanelWidth] = useState<number>(480);
+  const [dragging, setDragging] = useState(false);
 
   // 패널 폭 — localStorage 복원
   useEffect(() => {
@@ -48,30 +49,36 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
   }, []);
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem("vs-panel-width", String(panelWidth));
-    // 캔버스 사이즈 변경 → cytoscape resize
     cyRef.current?.resize();
   }, [panelWidth]);
 
-  const startPanelDrag = (e: React.MouseEvent) => {
+  const startPanelDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
+    const handle = e.currentTarget;
     const startX = e.clientX;
     const startW = panelWidth;
-    document.body.style.cursor = "ew-resize";
+    handle.setPointerCapture(e.pointerId);
+    setDragging(true);
     document.body.style.userSelect = "none";
-    const onMove = (ev: MouseEvent) => {
-      const dx = startX - ev.clientX; // 왼쪽으로 끌면 +
-      const w = Math.max(320, Math.min(900, startW + dx));
-      setPanelWidth(w);
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = startX - ev.clientX; // 왼쪽으로 끌면 패널 ↑
+      setPanelWidth(Math.max(320, Math.min(900, startW + dx)));
     };
     const onUp = () => {
-      document.body.style.cursor = "";
+      try { handle.releasePointerCapture(e.pointerId); } catch {}
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
       document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      setDragging(false);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
   };
+
+  const resetPanelWidth = () => setPanelWidth(480);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -271,12 +278,28 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
       {selected && (
         <>
           <div
-            onMouseDown={startPanelDrag}
+            onPointerDown={startPanelDrag}
+            onDoubleClick={resetPanelWidth}
             role="separator"
             aria-orientation="vertical"
-            title="드래그해서 패널 너비 조절"
-            className="w-1.5 shrink-0 cursor-ew-resize bg-ink-700 hover:bg-blue-500 active:bg-blue-400 transition-colors"
-          />
+            title="드래그하여 패널 너비 조절 · 더블클릭으로 기본값(480px) 리셋"
+            className={`group relative w-1 shrink-0 cursor-ew-resize transition-colors z-20 ${dragging ? "bg-blue-400" : "bg-ink-700 hover:bg-blue-500"}`}
+          >
+            {/* 넓은 hit area (양쪽으로 8px씩 더) */}
+            <div className="absolute -left-2 -right-2 top-0 bottom-0" />
+            {/* 그립 점 3개 */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-1 pointer-events-none">
+              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-500 group-hover:bg-white"}`} />
+              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-500 group-hover:bg-white"}`} />
+              <span className={`w-1 h-1 rounded-full ${dragging ? "bg-white" : "bg-gray-500 group-hover:bg-white"}`} />
+            </div>
+            {/* 드래그 중 현재 폭 표시 */}
+            {dragging && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[11px] font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap pointer-events-none">
+                {panelWidth}px
+              </div>
+            )}
+          </div>
           <aside style={{ width: panelWidth }} className="shrink-0 bg-ink-900 overflow-y-auto">
             <DetailPanel selected={selected} onClose={() => setSelected(null)} />
           </aside>
