@@ -58,7 +58,7 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
             "text-valign": "center",
             "text-halign": "center",
             "text-wrap": "wrap",
-            "text-max-width": 88,
+            "text-max-width": "88",
             "text-outline-width": 2,
             "text-outline-color": "#0f1117",
             "border-width": 1.5,
@@ -80,7 +80,7 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
             "text-outline-width": 0,
             "text-valign": "top",
             "text-margin-y": -8,
-            "padding": 24,
+            "padding": "24",
             "shape": "round-rectangle",
           },
         },
@@ -117,7 +117,7 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
       const conn = n.closedNeighborhood();
       cy.elements().not(conn).addClass("dim");
       conn.addClass("hl");
-      setSelected({ data: n.data(), edges: n.connectedEdges().map((e) => ({
+      setSelected({ data: n.data(), edges: n.connectedEdges().map((e: any) => ({
         data: e.data(),
         otherLabel: (e.source().id() === n.id() ? e.target() : e.source()).data("label"),
       }))});
