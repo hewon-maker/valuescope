@@ -36,6 +36,42 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
   const [activeEdges, setActiveEdges] = useState<Set<string>>(
     new Set(["aligned_strong", "aligned", "weak", "gap", "tension"])
   );
+  const [panelWidth, setPanelWidth] = useState<number>(480);
+
+  // 패널 폭 — localStorage 복원
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem("vs-panel-width") : null;
+    if (saved) {
+      const n = Number(saved);
+      if (!isNaN(n)) setPanelWidth(Math.max(320, Math.min(900, n)));
+    }
+  }, []);
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("vs-panel-width", String(panelWidth));
+    // 캔버스 사이즈 변경 → cytoscape resize
+    cyRef.current?.resize();
+  }, [panelWidth]);
+
+  const startPanelDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = panelWidth;
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev: MouseEvent) => {
+      const dx = startX - ev.clientX; // 왼쪽으로 끌면 +
+      const w = Math.max(320, Math.min(900, startW + dx));
+      setPanelWidth(w);
+    };
+    const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   useEffect(() => {
     if (!ref.current) return;
@@ -231,11 +267,20 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
         <div ref={ref} className="cy-container" />
       </div>
 
-      {/* 상세 패널 */}
+      {/* 상세 패널 + 드래그 리사이즈 핸들 */}
       {selected && (
-        <aside className="w-[480px] shrink-0 bg-ink-900 border-l border-ink-700 overflow-y-auto">
-          <DetailPanel selected={selected} onClose={() => setSelected(null)} />
-        </aside>
+        <>
+          <div
+            onMouseDown={startPanelDrag}
+            role="separator"
+            aria-orientation="vertical"
+            title="드래그해서 패널 너비 조절"
+            className="w-1.5 shrink-0 cursor-ew-resize bg-ink-700 hover:bg-blue-500 active:bg-blue-400 transition-colors"
+          />
+          <aside style={{ width: panelWidth }} className="shrink-0 bg-ink-900 overflow-y-auto">
+            <DetailPanel selected={selected} onClose={() => setSelected(null)} />
+          </aside>
+        </>
       )}
     </div>
   );
