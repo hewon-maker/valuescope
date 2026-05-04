@@ -53,19 +53,19 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
             "background-color": "data(color)",
             "label": "data(label)",
             "color": "#fff",
-            "font-size": 11,
+            "font-size": 13,
             "font-weight": 600,
             "text-valign": "center",
             "text-halign": "center",
             "text-wrap": "wrap",
-            "text-max-width": "88",
+            "text-max-width": "120",
             "text-outline-width": 2,
             "text-outline-color": "#0f1117",
             "border-width": 1.5,
             "border-color": "rgba(255,255,255,0.15)",
           },
         },
-        { selector: 'node[type="root"]', style: { "font-size": 14, "font-weight": 800, "border-width": 3 } },
+        { selector: 'node[type="root"]', style: { "font-size": 16, "font-weight": 800, "border-width": 3 } },
         {
           selector: 'node[type="category"]',
           style: {
@@ -74,7 +74,7 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
             "border-width": 2,
             "border-style": "dashed",
             "border-opacity": 0.6,
-            "font-size": 13,
+            "font-size": 15,
             "font-weight": 700,
             "color": "data(color)",
             "text-outline-width": 0,
@@ -233,7 +233,7 @@ export default function MindmapViewer({ data }: { data: MindmapData }) {
 
       {/* 상세 패널 */}
       {selected && (
-        <aside className="w-80 bg-ink-900 border-l border-ink-700 overflow-y-auto">
+        <aside className="w-[480px] shrink-0 bg-ink-900 border-l border-ink-700 overflow-y-auto">
           <DetailPanel selected={selected} onClose={() => setSelected(null)} />
         </aside>
       )}
@@ -295,15 +295,15 @@ function DetailPanel({ selected, onClose }: { selected: any; onClose: () => void
   const d = selected.data;
   const edges = selected.edges?.filter((e: any) => e.data.type !== "structure") ?? [];
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-start mb-3">
+    <div className="p-5">
+      <div className="flex justify-between items-start mb-4">
         <div>
-          <div className="text-base font-bold text-white leading-tight">{(d.label || "").replace(/\n/g, " ")}</div>
-          <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-ink-700 text-gray-300">
+          <div className="text-lg font-bold text-white leading-tight">{(d.label || "").replace(/\n/g, " ")}</div>
+          <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-ink-700 text-gray-300">
             {TYPE_LABEL[d.type] || d.type}
           </span>
         </div>
-        <button onClick={onClose} className="text-gray-500 hover:text-white text-lg leading-none">✕</button>
+        <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none ml-2">✕</button>
       </div>
 
       {d.subthemes && d.subthemes.length > 0 && (
@@ -334,9 +334,9 @@ function DetailPanel({ selected, onClose }: { selected: any; onClose: () => void
         </Section>
       )}
 
-      {d.summary && <Section title="해석"><div className="text-xs text-gray-300 leading-relaxed bg-ink-800 rounded-md px-3 py-2">{d.summary}</div></Section>}
+      {d.summary && <Section title="해석"><div className="text-[13.5px] text-gray-200 leading-relaxed bg-ink-800 rounded-md px-4 py-3">{d.summary}</div></Section>}
       {d.sample_quote && <Section title="대표 응답"><Quote>{d.sample_quote}</Quote></Section>}
-      {d.by_dept && <Section title="부서 분포"><div className="text-xs text-gray-300 bg-ink-800 rounded-md px-3 py-2">{d.by_dept}</div></Section>}
+      {d.by_dept && <Section title="부서 분포"><div className="text-[13.5px] text-gray-200 bg-ink-800 rounded-md px-4 py-3">{d.by_dept}</div></Section>}
 
       {d.quotes && d.quotes.length > 0 && (
         <Section title="대표 인용구">
@@ -380,5 +380,5 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 function Quote({ children }: { children: React.ReactNode }) {
-  return <div className="bg-ink-800 border-l-2 border-blue-400 px-3 py-2 mb-1.5 rounded-r text-xs text-gray-300 leading-relaxed">{children}</div>;
+  return <div className="bg-ink-800 border-l-2 border-blue-400 px-4 py-3 mb-2 rounded-r text-[13.5px] text-gray-200 leading-relaxed whitespace-pre-wrap break-words">{children}</div>;
 }
