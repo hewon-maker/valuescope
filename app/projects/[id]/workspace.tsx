@@ -31,7 +31,13 @@ export default function ProjectWorkspace({
     try {
       const newRows: UploadRow[] = [];
       for (const file of Array.from(files)) {
-        const path = `${user.id}/${projectId}/${kind}/${Date.now()}_${file.name}`;
+        const dot = file.name.lastIndexOf(".");
+        const ext = dot >= 0 ? file.name.slice(dot).toLowerCase().replace(/[^a-z0-9.]/g, "") : "";
+        const safeName = (dot >= 0 ? file.name.slice(0, dot) : file.name)
+          .replace(/[^a-zA-Z0-9._-]+/g, "_")
+          .replace(/^_+|_+$/g, "")
+          .slice(0, 80) || "file";
+        const path = `${user.id}/${projectId}/${kind}/${Date.now()}_${safeName}${ext}`;
         const { error: upErr } = await supabase.storage.from("uploads").upload(path, file, { upsert: false });
         if (upErr) throw upErr;
         const { data: row, error: insErr } = await supabase.from("uploads").insert({
